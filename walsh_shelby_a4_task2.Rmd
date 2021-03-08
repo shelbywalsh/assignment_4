@@ -1,0 +1,130 @@
+---
+title: "Parameter Estimation – Wild Fish Catch"
+author: "Shelby Walsh"
+date: "3/7/2021"
+output: 
+  html_document:
+    code_folding: hide
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      warning = FALSE,
+                      message = FALSE)
+
+library(tidyverse)
+library(janitor)
+library(here)
+library(boot)
+library(gt)
+library(patchwork)
+library(broom)
+library(nlstools)
+library(tidyr)
+library(lubridate)
+library(tsibble)
+library(feasts)
+library(GGally)
+library(broom)
+library(jtools)
+library(scales)
+library(kableExtra)
+```
+
+
+```{r}
+fish <- read_csv("fish_catch.csv") %>% 
+  clean_names() %>% 
+  rename("year" = world_wild_fish_catch_and_farmed_fish_production_1950_2012,
+         "wild_catch" = x2,
+         "farmed" = x3,
+         "total" = x4) %>% 
+  slice(-(1:4)) %>% 
+  mutate("y" = c(0:66)) %>% 
+  head(63) 
+
+```
+
+```{r}
+wild <- fish %>% 
+  select(wild_catch, y) 
+
+wild <- transform(wild, wild_catch = as.numeric(wild_catch))
+
+ggplot(data = wild, aes(x = y, y = wild_catch)) +
+  geom_point() +
+  theme_minimal() +
+  labs(x = "Year",
+       y = "Global Wild Caught Fish in Millions of Tonnes")
+
+```
+
+#### The exploritoty graph above shows the Global wild fish catch from 1950-2012. When we look at the graph, the overall trend of wild catch is similar to that of logistic growth. This type of growth can be demonstrated through the following euation: 
+$P(t)=\frac{K}{1+Ae^{-kt}}$
+
+When we look at the graph, $K$ or the carrying capacity seems to fall around 90 million tonnes. If our carrying capacity is 90, then our $A$ term will be 4.2: $A=\frac{K-P_o}{P_o}$
+
+```{r}
+wild_exp <- wild %>% 
+  filter(y < 40) %>% 
+  mutate(ln_wild = log(wild_catch))
+
+lm_wild <- lm(ln_wild ~ y, data = wild_exp)
+lm_wild
+```
+
+
+```{r}
+wild_nls <- nls(wild_catch ~ K/(1 + A*exp(-r*y)),
+              data = wild,
+              start = list(K = 90, A = 4.2, r = 0.035),
+              trace = TRUE
+              )
+
+summary(wild_nls)
+
+model_out <- broom::tidy(wild_nls) 
+
+model_out %>% 
+  kbl(caption = "**Table 1.** Parameters of Logistic Growth Model for Wild Catch Fish") %>%
+  kable_classic(full_width = F, html_font = "Cambria") 
+
+wild_est <- model_out$estimate[2]
+```
+
+Our model with estimated parameters is:
+$$P(t) = \frac{100.2}{1+4.316e^{-0.069t}}$$
+
+```{r}
+wild_predict <- predict(wild_nls)
+
+# Bind predictions to original data frame:
+wild_complete <- data.frame(wild, wild_predict)
+
+# Plot them all together:
+ggplot(data = wild_complete, aes(x = y, y = wild_catch)) +
+  geom_point() +
+  geom_line(aes(x = y, y = wild_predict), color = "darkblue") +
+  theme_minimal() +
+  labs(x = "Time",
+       y = "Fish in Millions of Tonnes",
+       title = "Global Wild Catch Fish from 1950-2012 and Predicted Catch Growth") +
+  annotate(geom = "text",
+           x= 25,
+           y = 69,
+           label = "Predicted logistic growth",
+           size = 3,
+           color = "darkblue") +
+  theme(plot.title = element_text(size = 14,
+                                   face = "bold",
+        hjust = 0.5),
+        axis.title.y = element_text(size = 12),
+        axis.title.x = element_text(size = 12))
+```
+
+```{r}
+
+wild_ci <- confint2(wild_nls)
+wild_ci
+```
+

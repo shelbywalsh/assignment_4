@@ -1,0 +1,50 @@
+---
+title: "Bootstrapped Confidence Interval for Proportions"
+author: "Shelby Walsh"
+date: "3/5/2021"
+output: html_document
+
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      warning = FALSE,
+                      message = FALSE)
+
+library(tidyverse)
+library(here)
+library(boot)
+library(gt)
+library(patchwork)
+library(broom)
+library(nlstools)
+```
+
+
+#### UCSB students were surveyed to find out what propotion of nonbinary/genderqueer had faced “exclusionary, offensive, hostile or intimidating conduct” first hand. 22 out of 36 students stated they had encountered this. Using this data, we extrapolated the responses to see what propoation of students nation wide might be experiencing this. 
+```{r}
+student <- rep(c(0,1), times = c(22, 14))
+
+prop <- function (x,i) {sum(x[i])/36}
+
+sboot_1m <- boot(student, 
+                 statistic = prop, 
+                 R = 1000000)
+```
+
+```{r}
+
+sboot_1m_df <- data.frame(prop_stud = sboot_1m$t)
+
+ggplot(data = sboot_1m_df, aes(x = prop_stud)) +
+  geom_histogram() +
+  theme_minimal()
+
+```
+
+```{r}
+
+boot.ci(sboot_1m, conf = 0.95)
+```
+
+#### After running a bootstrap model a 1 million times, each experiment independent from the other, we have found with a 95% confidence interval of 23% to 55% of nonbinary/genderqueer students would have experience hostile behavior. This means there is a 95% chance that 95 out of 100 samples will fall in the propotion of students 23-55%.
